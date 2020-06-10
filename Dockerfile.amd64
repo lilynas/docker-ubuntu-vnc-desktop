@@ -1,14 +1,14 @@
-# Built with arch: amd64 flavor: lxde image: ubuntu:20.04
+# Built with arch: amd64 flavor: lxde image: ubuntu:18.04
 #
 ################################################################################
 # base system
 ################################################################################
 
-FROM ubuntu:20.04 as system
+FROM ubuntu:18.04 as system
 
 
 
-RUN sed -i 's#http://archive.ubuntu.com/ubuntu/#mirror://mirrors.ubuntu.com/mirrors.txt#' /etc/apt/sources.list;
+RUN sed -i 's#http://archive.ubuntu.com/ubuntu/#mirror://mirrors.ubuntu.com/mirrors.txt#' /etc/apt/sources.list; 
 
 
 # built-in packages
@@ -16,28 +16,40 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt update \
     && apt install -y --no-install-recommends software-properties-common curl apache2-utils \
     && apt update \
+    && apt-get install -y wget software-properties-common apt-transport-https \
+    wget -O- -nc https://dl.winehq.org/wine-builds/winehq.key | apt-key add - && \
+    apt-add-repository -y https://dl.winehq.org/wine-builds/ubuntu \
     && apt install -y --no-install-recommends --allow-unauthenticated \
-        supervisor nginx sudo net-tools zenity xz-utils \
+        supervisor sudo net-tools zenity xz-utils \
         dbus-x11 x11-utils alsa-utils \
         mesa-utils libgl1-mesa-dri \
+    &&  dpkg --add-architecture i386 && \
+        apt-get update && \
+        apt-get install -y \
+        cabextract unzip python-numpy \
+        language-pack-zh-hans tzdata fontconfig \
+    &&  apt-get install -y --no-install-recommends \
+        fcitx fcitx-ui-classic fcitx-pinyin \
+    &&  apt-get install -y --allow-unauthenticated --install-recommends winehq-devel && \
+    wget -O /usr/local/bin/winetricks https://github.com/Winetricks/winetricks/raw/master/src/winetricks && \
+    chmod 755 /usr/local/bin/winetricks && \
+    wget -O /tmp/gecko.tar.gz http://dl.winehq.org/wine/wine-gecko/2.47.1/wine-gecko-2.47.1-x86.tar.bz2 && \
+    mkdir -p /usr/share/wine/gecko && \
+    tar xf /tmp/gecko.tar.gz -C /usr/share/wine/gecko && \
+    apt-get purge -y software-properties-common apt-transport-https && \
+    apt-get autoremove -y && \
     && apt autoclean -y \
-    && apt autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
-# install debs error if combine together
-RUN apt update \
-    && apt install -y --no-install-recommends --allow-unauthenticated \
-        xvfb x11vnc \
-        vim-tiny firefox ttf-ubuntu-font-family ttf-wqy-zenhei  \
-    && apt autoclean -y \
-    && apt autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt update \
-    && apt install -y gpg-agent \
-    && curl -LO https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && (dpkg -i ./google-chrome-stable_current_amd64.deb || apt-get install -fy) \
-    && curl -sSL https://dl.google.com/linux/linux_signing_key.pub | apt-key add \
-    && rm google-chrome-stable_current_amd64.deb \
+# install debs error if combine together
+RUN add-apt-repository -y ppa:fcwu-tw/apps \
+    && apt update \
+    && apt install -y --no-install-recommends --allow-unauthenticated \
+        xvfb x11vnc=0.9.16-1 \
+        vim-tiny firefox chromium-browser ttf-ubuntu-font-family ttf-wqy-zenhei  \
+    && add-apt-repository -r ppa:fcwu-tw/apps \
+    && apt autoclean -y \
+    && apt autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt update \
@@ -46,8 +58,8 @@ RUN apt update \
     && apt autoclean -y \
     && apt autoremove -y \
     && rm -rf /var/lib/apt/lists/*
-
-
+ 
+ 
 # Additional packages require ~600MB
 # libreoffice  pinta language-pack-zh-hant language-pack-gnome-zh-hant firefox-locale-zh-hant libreoffice-l10n-zh-tw
 
@@ -68,9 +80,8 @@ RUN apt update \
 COPY rootfs/usr/local/lib/web/backend/requirements.txt /tmp/
 RUN apt-get update \
     && dpkg-query -W -f='${Package}\n' > /tmp/a.txt \
-    && apt-get install -y python3-pip python3-dev build-essential \
-	&& pip3 install setuptools wheel && pip3 install -r /tmp/requirements.txt \
-    && ln -s /usr/bin/python3 /usr/local/bin/python \
+    && apt-get install -y python-pip python-dev build-essential \
+	&& pip install setuptools wheel && pip install -r /tmp/requirements.txt \
     && dpkg-query -W -f='${Package}\n' > /tmp/b.txt \
     && apt-get remove -y `diff --changed-group-format='%>' --unchanged-group-format='' /tmp/a.txt /tmp/b.txt | xargs` \
     && apt-get autoclean -y \
@@ -82,17 +93,17 @@ RUN apt-get update \
 ################################################################################
 # builder
 ################################################################################
-FROM ubuntu:20.04 as builder
+FROM ubuntu:18.04 as builder
 
 
-RUN sed -i 's#http://archive.ubuntu.com/ubuntu/#mirror://mirrors.ubuntu.com/mirrors.txt#' /etc/apt/sources.list;
+RUN sed -i 's#http://archive.ubuntu.com/ubuntu/#mirror://mirrors.ubuntu.com/mirrors.txt#' /etc/apt/sources.list; 
 
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates gnupg patch
 
 # nodejs
-RUN curl -sL https://deb.nodesource.com/setup_12.x | bash - \
+RUN curl -sL https://deb.nodesource.com/setup_8.x | bash - \
     && apt-get install -y nodejs
 
 # yarn
@@ -106,7 +117,6 @@ COPY web /src/web
 RUN cd /src/web \
     && yarn \
     && yarn build
-RUN sed -i 's#app/locale/#novnc/app/locale/#' /src/web/dist/static/novnc/app/ui.js
 
 
 
@@ -124,6 +134,9 @@ RUN ln -sf /usr/local/lib/web/frontend/static/websockify /usr/local/lib/web/fron
 EXPOSE 80
 WORKDIR /root
 ENV HOME=/home/ubuntu \
-    SHELL=/bin/bash
+    SHELL=/bin/bash \
+    LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=Asia/Shanghai 
 HEALTHCHECK --interval=30s --timeout=5s CMD curl --fail http://127.0.0.1:6079/api/health
 ENTRYPOINT ["/startup.sh"]

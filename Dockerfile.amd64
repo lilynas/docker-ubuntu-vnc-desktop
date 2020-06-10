@@ -16,13 +16,31 @@ ENV DEBIAN_FRONTEND noninteractive
 RUN apt update \
     && apt install -y --no-install-recommends software-properties-common curl apache2-utils \
     && apt update \
+    && apt-get install -y wget software-properties-common apt-transport-https \
+    wget -O- -nc https://dl.winehq.org/wine-builds/winehq.key | apt-key add - && \
+    apt-add-repository -y https://dl.winehq.org/wine-builds/ubuntu \
     && apt install -y --no-install-recommends --allow-unauthenticated \
-        supervisor nginx sudo net-tools zenity xz-utils \
+        supervisor sudo net-tools zenity xz-utils \
         dbus-x11 x11-utils alsa-utils \
         mesa-utils libgl1-mesa-dri \
+    &&  dpkg --add-architecture i386 && \
+        apt-get update && \
+        apt-get install -y \
+        cabextract unzip python-numpy \
+        language-pack-zh-hans tzdata fontconfig \
+    &&  apt-get install -y --no-install-recommends \
+        fcitx fcitx-ui-classic fcitx-pinyin \
+    &&  apt-get install -y --allow-unauthenticated --install-recommends winehq-devel && \
+    wget -O /usr/local/bin/winetricks https://github.com/Winetricks/winetricks/raw/master/src/winetricks && \
+    chmod 755 /usr/local/bin/winetricks && \
+    wget -O /tmp/gecko.tar.gz http://dl.winehq.org/wine/wine-gecko/2.47.1/wine-gecko-2.47.1-x86.tar.bz2 && \
+    mkdir -p /usr/share/wine/gecko && \
+    tar xf /tmp/gecko.tar.gz -C /usr/share/wine/gecko && \
+    apt-get purge -y software-properties-common apt-transport-https && \
+    apt-get autoremove -y && \
     && apt autoclean -y \
-    && apt autoremove -y \
     && rm -rf /var/lib/apt/lists/*
+
 # install debs error if combine together
 RUN add-apt-repository -y ppa:fcwu-tw/apps \
     && apt update \
@@ -116,6 +134,9 @@ RUN ln -sf /usr/local/lib/web/frontend/static/websockify /usr/local/lib/web/fron
 EXPOSE 80
 WORKDIR /root
 ENV HOME=/home/ubuntu \
-    SHELL=/bin/bash
+    SHELL=/bin/bash \
+    LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=Asia/Shanghai 
 HEALTHCHECK --interval=30s --timeout=5s CMD curl --fail http://127.0.0.1:6079/api/health
 ENTRYPOINT ["/startup.sh"]
